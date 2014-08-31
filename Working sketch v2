@@ -47,7 +47,7 @@ SSSSSSSS = sensor ID, F007th = Ox45
 NRRRRRRR = Rolling Code Byte, the N bit is set to 1 for 64 cycles to indicate it is reset or new to the Rx box
 b = battery indicator?
 CCC = Channel identifier, channels 1 to 8 can be selected on the F007th unit using dipswitches. Channel 1 => 000, Channel 2 => 001, Channel 3 => 010 etc.
-TTTT TTTTTTTT = 12 bit temperature data. MSB indicates + or - temperature. 
+TTTT TTTTTTTT = 12 bit temperature data.
       To obtain F: convert decimal to binary, take away 400 and divide by 10 e.g. (using example above) 010001001011 => 1099
       (1099-400)/10= 69.9F
       To obtain C: convert decimal to binary, take away 720 and multiply by 0.0556 e.g.
@@ -101,10 +101,10 @@ float  Ch5temp = 0; // Stored value for channel 5 temperature
 float  Ch5hum = 0; // Stored value for channel 5 humidity
 float  Ch6temp = 0; // Stored value for channel 6 temperature
 float  Ch6hum = 0; // Stored value for channel 6 humidity
-//float  Ch5temp = 0; // Stored value for channel 7 temperature
-//float  Ch5hum = 0; // Stored value for channel 7 humidity
-//float  Ch6temp = 0; // Stored value for channel 8 temperature
-//float  Ch6hum = 0; // Stored value for channel 8 humidity
+//float  Ch7temp = 0; // Stored value for channel 7 temperature
+//float  Ch7hum = 0; // Stored value for channel 7 humidity
+//float  Ch8temp = 0; // Stored value for channel 8 temperature
+//float  Ch8hum = 0; // Stored value for channel 8 humidity
 
 void setup() {
   Serial.begin(115200);//make it fast so it dumps quick!
