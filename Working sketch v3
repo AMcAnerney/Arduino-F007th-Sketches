@@ -260,11 +260,11 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     }
    } 
    if ((dataType == 0x45) && (stnId == 2) && (Newhum <= 100)){
-    if (Ch1temp == 100){ 
+    if (Ch2temp == 100){ 
     Ch2temp = Newtemp;
     Ch2hum = Newhum;
     }
-    if (Ch1temp != 100){ 
+    if (Ch2temp != 100){ 
     differencetemp = Newtemp - Ch2temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch2temp = Newtemp;
@@ -272,11 +272,11 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     }
    } 
    if ((dataType == 0x45) && (stnId == 3)&& (Newhum <= 100)){
-    if (Ch1temp == 100){ 
+    if (Ch3temp == 100){ 
     Ch3temp = Newtemp;
     Ch3hum = Newhum;
     }
-    if (Ch1temp != 100){ 
+    if (Ch3temp != 100){ 
     differencetemp = Newtemp - Ch3temp;
     if (differencetemp < 10 && differencetemp > -10){ 
     Ch3temp = Newtemp;
@@ -284,11 +284,11 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     }
    } 
    if ((dataType == 0x45) && (stnId == 4) && (Newhum <= 100)){
-    if (Ch1temp == 100){ 
+    if (Ch4temp == 100){ 
     Ch4temp = Newtemp;
     Ch4hum = Newhum;
     }
-    if (Ch1temp != 100){ 
+    if (Ch4temp != 100){ 
     differencetemp = Newtemp - Ch4temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch4temp = Newtemp;
@@ -296,11 +296,11 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     }
    } 
    if ((dataType == 0x45) && (stnId == 5) && (Newhum <= 100)){
-    if (Ch1temp == 100){
+    if (Ch5temp == 100){
     Ch5temp = Newtemp;
     Ch5hum = Newhum;
     }
-    if (Ch1temp != 100){
+    if (Ch5temp != 100){
     differencetemp = Newtemp - Ch5temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch5temp = Newtemp;
@@ -308,11 +308,11 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     }
    } 
    if ((dataType == 0x45) && (stnId == 6) && (Newhum <= 100)){
-    if (Ch1temp == 100){ 
+    if (Ch6temp == 100){ 
     Ch6temp = Newtemp;
     Ch6hum = Newhum;
     }
-    if (Ch1temp != 100){
+    if (Ch6temp != 100){
     differencetemp = Newtemp - Ch6temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch6temp = Newtemp;
