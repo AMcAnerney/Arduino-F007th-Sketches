@@ -265,7 +265,7 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     Ch2hum = Newhum;
     }
     if (Ch1temp != 100){ 
-    differencetemp = Newtemp - Ch1temp;
+    differencetemp = Newtemp - Ch2temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch2temp = Newtemp;
     Ch2hum = Newhum;}
@@ -277,7 +277,7 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     Ch3hum = Newhum;
     }
     if (Ch1temp != 100){ 
-    differencetemp = Newtemp - Ch1temp;
+    differencetemp = Newtemp - Ch3temp;
     if (differencetemp < 10 && differencetemp > -10){ 
     Ch3temp = Newtemp;
     Ch3hum = Newhum;}
@@ -289,7 +289,7 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     Ch4hum = Newhum;
     }
     if (Ch1temp != 100){ 
-    differencetemp = Newtemp - Ch1temp;
+    differencetemp = Newtemp - Ch4temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch4temp = Newtemp;
     Ch4hum = Newhum;}
@@ -301,7 +301,7 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     Ch5hum = Newhum;
     }
     if (Ch1temp != 100){
-    differencetemp = Newtemp - Ch1temp;
+    differencetemp = Newtemp - Ch5temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch5temp = Newtemp;
     Ch5hum = Newhum;}
@@ -313,7 +313,7 @@ int stnId = ((manchester[0][3]&B01110000)/16)+1;  // looks at 3 bits in byte 3 u
     Ch6hum = Newhum;
     }
     if (Ch1temp != 100){
-    differencetemp = Newtemp - Ch1temp;
+    differencetemp = Newtemp - Ch6temp;
     if (differencetemp < 10 && differencetemp > -10){
     Ch6temp = Newtemp;
     Ch6hum = Newhum;}
