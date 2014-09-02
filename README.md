@@ -9,7 +9,7 @@ Captures Ambient F007th Thermo-Hygrometer data packets by identifying a header o
    
 Correctly identifies positive and negative temperature values for up to 8 channels.
    
-Correctly identifies humidity values for up to 8 channels 8 channels.
+Correctly identifies humidity values for up to 8 channels.
    
 Prints data for all channels to the serial port every 5 minutes.
    
