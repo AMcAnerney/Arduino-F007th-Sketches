@@ -1,0 +1,445 @@
+/* 
+ Andrew's sketch for capturing data from Ambient F007th Thermo-Hygrometer and uploading it to Xively
+ 
+ Inspired by the many weather station hackers who have gone before,
+ Only possible thanks to the invaluable help and support on the Arduino forums.
+
+ With particular thanks to
+   
+ Rob Ward (whose Manchester Encoding reading by delay rather than interrupt
+ is the basis of this code)
+ https://github.com/robwlakes/ArduinoWeatherOS
+ 
+ The work of 3zero8 capturing and analysing the F007th data
+ http://forum.arduino.cc/index.php?topic=214436.0
+ 
+ The work of Volgy capturing and analysing the F007th data
+ https://github.com/volgy/gr-ambient
+ 
+ Marco Schwartz for showing how to send sensor data to websites
+ http://www.openhomeautomation.net/
+ 
+ The forum contributions of;
+   dc42: showing how to create 5 minute samples.
+   jremington: suggesting how to construct error checking using averages (although not used this is where the idea of using newtemp and newhum for error checking originated)
+   Krodal: for his 6 lines of code in the forum thread "Compare two sensor values"
+   
+ This example code is in the public domain.
+ 
+ What this code does:
+   Captures Ambient F007th Thermo-Hygrometer data packets by;
+     Identifying a header of at least 10 rising edges (manchester encoding binary 1s)
+     Synchs the data correctly within byte boundaries
+     Distinguishes between F007th data packets and other 434Mhz signals with equivalent header by checking value of sensor ID byte 
+   Correctly identifies positive and negative temperature values to 1 decimal place for up to 8 channels
+   Correctly identifies humidity values for up to 8 channels
+   Error checks data by rejecting;
+     humidity value outside the range 1 to 100%
+     temperature changes of approx 1C per minute or greater
+   Send the data by wifi to Xively every 5 minutes
+   
+Hardware to use with this code
+  6 F007th Thermo-Hygrometer set to different channels (can be adapted for between 1 and 8)
+  A 434Mhz receiver
+  17cm strand of CAT-5 cable as an antenna.
+  CC3000 (I use the Adafruit breakout board with ceramic antenna)
+
+Code optimisation
+   In order to improve reliability this code has been optimised to remove float values except when sending to Xively.
+   This code does not provide any output to the serial monitor on what is happening,  see earlier versions for printouts.
+  
+F007th Ambient Thermo-Hygrometer
+Sample Data:
+0        1        2        3        4        5        6        7
+FD       45       4F       04       4B       0B       52       0
+0   1    2   3    4   5    6   7    8   9    A   B    C   D    E
+11111101 01000101 01001111 00000100 01001011 00001011 01010010 0000
+hhhhhhhh SSSSSSSS NRRRRRRR bCCCTTTT TTTTTTTT HHHHHHHH CCCCCCCC ????
+ 
+Channel 1 F007th sensor displaying 21.1 Centigrade and 11% RH
+
+hhhhhhhh = header with final 01 before data packet starts (note using this sketch the header 01 is omitted when the binary is displayed)
+SSSSSSSS = sensor ID, F007th = Ox45
+NRRRRRRR = Rolling Code Byte? Resets each time the battery is changed
+b = battery indicator?
+CCC = Channel identifier, channels 1 to 8 can be selected on the F007th unit using dipswitches. Channel 1 => 000, Channel 2 => 001, Channel 3 => 010 etc.
+TTTT TTTTTTTT = 12 bit temperature data.
+      To obtain F: convert binary to decimal, take away 400 and divide by 10 e.g. (using example above) 010001001011 => 1099
+      (1099-400)/10= 69.9F
+      To obtain C: convert binary to decimal, take away 720 and multiply by 0.0556 e.g.
+      0.0556*(1099-720)= 21.1C
+HHHHHHHH = 8 bit humidity in binary. e.g. (using example above) 00001011 => 11
+CCCCCCCC = checksum? Note that this sketch only looks at the first 6 bytes and ignores the checksum
+   
+*/
+
+// Libraries
+#include <Adafruit_CC3000.h>
+#include <SPI.h>
+#include <Xively.h>
+#include <HttpClient.h>
+
+// Define CC3000 chip pins
+#define ADAFRUIT_CC3000_IRQ   3
+#define ADAFRUIT_CC3000_VBAT  5
+#define ADAFRUIT_CC3000_CS    10
+
+// Create CC3000 instances
+Adafruit_CC3000 cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, ADAFRUIT_CC3000_IRQ, ADAFRUIT_CC3000_VBAT,
+                                         SPI_CLOCK_DIV2); // you can change this clock speed
+
+// WLAN parameters
+#define WLAN_SSID       "XXXXX" //Wifi network name
+#define WLAN_PASS       "XXXX"  //Wifi network password
+#define WLAN_SECURITY   WLAN_SEC_WPA2
+
+// Xively parameters
+char xivelyKey[] = "XXXXXXX"; //Xively Key
+#define FEED_ID "xxxxx" //Xively feed ID
+
+// For datastreams of floats:
+char AT[] = "0T"; //Sensor 1 temperature
+char BT[] = "1T"; //Sensor 2 temperature
+char CT[] = "2T"; //Sensor 3 temperature
+char DT[] = "3T"; //Sensor 4 temperature
+char ET[] = "GT"; //Sensor 5 temperature
+char FT[] = "OT"; //Sensor 6 temperature
+
+// For datastreams of ints:
+char AH[] = "0H"; //Sensor 1 humidity
+char BH[] = "1H"; //Sensor 2 humidity
+char CH[] = "2H"; //Sensor 3 humidity
+char DH[] = "3H"; //Sensor 4 humidity
+char EH[] = "GH"; //Sensor 5 humidity
+char FH[] = "OH"; //Sensor 6 humidity
+
+XivelyDatastream datastreams[] = {
+  XivelyDatastream(AT, strlen(AT), DATASTREAM_FLOAT),
+  XivelyDatastream(BT, strlen(BT), DATASTREAM_FLOAT),
+  XivelyDatastream(CT, strlen(CT), DATASTREAM_FLOAT),
+  XivelyDatastream(DT, strlen(DT), DATASTREAM_FLOAT),
+  XivelyDatastream(ET, strlen(ET), DATASTREAM_FLOAT),
+  XivelyDatastream(FT, strlen(FT), DATASTREAM_FLOAT),
+  XivelyDatastream(AH, strlen(AH), DATASTREAM_INT),
+  XivelyDatastream(BH, strlen(BH), DATASTREAM_INT),
+  XivelyDatastream(CH, strlen(CH), DATASTREAM_INT),
+  XivelyDatastream(DH, strlen(DH), DATASTREAM_INT),
+  XivelyDatastream(EH, strlen(EH), DATASTREAM_INT),
+  XivelyDatastream(FH, strlen(FH), DATASTREAM_INT),
+  };
+
+// Wrap the datastreams into a feed
+XivelyFeed feed(174245690, datastreams, 12 /* number of datastreams */);
+
+// Interface Definitions
+int RxPin           = 8;   //The number of signal from the Rx
+
+// Variables for Manchester Receiver Logic:
+word    sDelay     = 242;  //Small Delay about 1/4 of bit duration
+word    lDelay     = 484;  //Long Delay about 1/2 of bit duration, 1/4 + 1/2 = 3/4
+byte    polarity   = 1;    //0 for lo->hi==1 or 1 for hi->lo==1 for Polarity, sets tempBit at start
+byte    tempBit    = 1;    //Reflects the required transition polarity
+boolean firstZero  = false;//flags when the first '0' is found.
+boolean noErrors   = true; //flags if signal does not follow Manchester conventions
+//variables for Header detection
+byte    headerBits = 10;   //The number of ones expected to make a valid header
+byte    headerHits = 0;    //Counts the number of "1"s to determine a header
+//Variables for Byte storage
+boolean sync0In=true;      //Expecting sync0 to be inside byte boundaries, set to false for sync0 outside bytes
+byte    dataByte   = 0;    //Accumulates the bit information
+byte    nosBits    = 6;    //Counts to 8 bits within a dataByte
+byte    maxBytes   = 6;    //Set the bytes collected after each header. NB if set too high, any end noise will cause an error
+byte    nosBytes   = 0;    //Counter stays within 0 -> maxBytes
+//Variables for multiple packets
+byte    bank       = 0;    //Points to the array of 0 to 3 banks of results from up to 4 last data downloads 
+byte    nosRepeats = 3;    //Number of times the header/data is fetched at least once or up to 4 times
+//Banks for multiple packets if required (at least one will be needed)
+byte  manchester[7];   //Stores 4 banks of manchester pattern decoded on the fly
+
+// Variables to prepare recorded values for Ambient
+
+byte stnId = 0; //Identifies the channel number
+int dataType = 0;  //Identifies the Ambient Thermo-Hygrometer code
+int differencetemp = 0;
+int differencehum = 0;
+int Newtemp = 0;
+int Newhum = 0;
+int Ch1temp = 720; // Stored raw value for channel 1 temperature
+int Ch1hum = 0; // Stored value for channel 1 humidity
+int Ch2temp = 720; // Stored raw value for channel 2 temperature
+int Ch2hum = 0; // Stored value for channel 2 humidity
+int Ch3temp = 720; // Stored raw value for channel 3 temperature
+int Ch3hum = 0; // Stored value for channel 3 humidity
+int Ch4temp = 720; // Stored raw value for channel 4 temperature
+int Ch4hum = 0; // Stored value for channel 4 humidity
+int Ch5temp = 200; // Stored raw value for channel 5 temperature
+int Ch5hum = 0; // Stored value for channel 5 humidity
+int Ch6temp = 200; // Stored raw value for channel 6 temperature
+int Ch6hum = 0; // Stored value for channel 6 humidity
+
+Adafruit_CC3000_Client client;
+XivelyClient xivelyclient(client);
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(RxPin, INPUT);
+  eraseManchester();  //clear the array to different nos cause if all zeroes it might think that is a valid 3 packets ie all equal
+  }
+
+// Main RF, to find header, then sync in with it and get a packet.
+
+void loop(){
+  tempBit=polarity; //these begin the same for a packet
+  noErrors=true;
+  firstZero=false;
+  headerHits=0;
+  nosBits=6;
+  nosBytes=0;
+  while (noErrors && (nosBytes<maxBytes)){
+    while(digitalRead(RxPin)!=tempBit){
+      //pause here until a transition is found
+    }//at Data transition, half way through bit pattern, this should be where RxPin==tempBit
+    delayMicroseconds(sDelay);//skip ahead to 3/4 of the bit pattern
+    // 3/4 the way through, if RxPin has changed it is definitely an error
+
+    if (digitalRead(RxPin)!=tempBit){
+      noErrors=false;//something has gone wrong, polarity has changed too early, ie always an error
+    }//exit and retry
+    else{
+      delayMicroseconds(lDelay);
+      //now 1 quarter into the next bit pattern,
+      if(digitalRead(RxPin)==tempBit){ //if RxPin has not swapped, then bitWaveform is swapping
+        //If the header is done, then it means data change is occuring ie 1->0, or 0->1
+        //data transition detection must swap, so it loops for the opposite transitions
+        tempBit = tempBit^1;
+      }//end of detecting no transition at end of bit waveform, ie end of previous bit waveform same as start of next bitwaveform
+
+      //Now process the tempBit state and make data definite 0 or 1's, allow possibility of Pos or Neg Polarity 
+      byte bitState = tempBit ^ polarity;//if polarity=1, invert the tempBit or if polarity=0, leave it alone.
+      if(bitState==1){ //1 data could be header or packet
+        if(!firstZero){
+          headerHits++;
+          if (headerHits==headerBits){
+
+            //Serial.print("H");
+          }
+        }
+        else{
+          add(bitState);//already seen first zero so add bit in
+        }
+      }//end of dealing with ones
+      else{  //bitState==0 could first error, first zero or packet
+        // if it is header there must be no "zeroes" or errors
+        if(headerHits<headerBits){
+          //Still in header checking phase, more header hits required
+          noErrors=false;//landing here means header is corrupted, so it is probably an error
+        }//end of detecting a "zero" inside a header
+        else{
+          //we have our header, chewed up any excess and here is a zero
+          if (!firstZero){ //if first zero, it has not been found previously
+            firstZero=true;
+            add(bitState);//Add first zero to bytes 
+            //Serial.print("!");
+          }//end of finding first zero
+          else{
+            add(bitState);
+          }//end of adding a zero bit
+        }//end of dealing with a first zero
+      }//end of dealing with zero's (in header, first or later zeroes)
+    }//end of first error check
+  }//end of while noErrors=true and getting packet of bytes
+
+// 5 minute delay between connecting to the internet
+
+const unsigned long fiveMinutes = 5 * 60 * 1000UL;
+static unsigned long lastSampleTime = 0;
+unsigned long now = millis();
+if (now - lastSampleTime >= fiveMinutes){  
+  lastSampleTime += fiveMinutes;
+  
+// Connect to the internet  
+  
+  if (!cc3000.begin()){
+    Serial.println(F("Couldn't begin()! Check your wiring?"));
+    while(1);
+    }  
+  cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY);
+  
+// Wait for DHCP to complete
+
+  while (!cc3000.checkDHCP()){
+    delay(100);
+    }
+    
+  uint32_t ip = 0; // Get IP
+   
+  while  (ip  ==  0)  {
+    if  (!  cc3000.getHostByName("api.xively.com", &ip))  {
+      Serial.println(F("Couldn't resolve!"));
+      while(1){}
+      } 
+    }  
+
+// Calculate float values to upload
+    
+  float AFT = (float((Ch1temp-720)*0.0556)); //converts raw temperature data into Celcius
+  float BFT = (float((Ch2temp-720)*0.0556));
+  float CFT = (float((Ch3temp-720)*0.0556));
+  float DFT = (float((Ch4temp-720)*0.0556));
+  float EFT = (float((Ch5temp-720)*0.0556));
+  float FFT = (float((Ch6temp-720)*0.0556));
+
+// Send datastreams
+  
+  datastreams[0].setFloat(AFT);
+  datastreams[1].setFloat(BFT);
+  datastreams[2].setFloat(CFT);
+  datastreams[3].setFloat(DFT);
+  datastreams[4].setFloat(EFT);
+  datastreams[5].setFloat(FFT);
+
+  datastreams[6].setInt(Ch1hum);  
+  datastreams[7].setInt(Ch2hum);
+  datastreams[8].setInt(Ch3hum);
+  datastreams[9].setInt(Ch4hum);
+  datastreams[10].setInt(Ch5hum);
+  datastreams[11].setInt(Ch6hum);
+  
+  int ret = xivelyclient.put(feed, xivelyKey);
+
+// Disconnect the CC3000
+  
+  cc3000.disconnect();
+
+  }
+} //end of mainloop
+
+//Read the binary data from the bank and apply conversions where necessary to scale and format data
+
+void add(byte bitData){
+  dataByte=(dataByte<<1)|bitData;
+  nosBits++;
+  if (nosBits==8){
+    nosBits=0;
+    manchester[nosBytes]=dataByte;
+    nosBytes++;
+    //Serial.print("B");
+  }
+  if(nosBytes==maxBytes){
+
+// Subroutines to extract data from Manchester encoding and error checking
+
+// Identify channels 1 to 8 by looking at 3 bits in byte 3
+    int stnId = ((manchester[3]&B01110000)/16)+1;
+    
+// Identify sensor by looking for sensorID in byte 1 (F007th Ambient Thermo-Hygrometer = 0x45)
+    dataType = manchester[1];  
+    
+// Gets raw temperature from bytes 3 and 4 (note this is neither C or F but a value from the sensor) 
+    Newtemp = (float((manchester[3]&B00000111)*256)+ manchester[4]);
+    
+// Gets humidity data from byte 5
+    Newhum =(manchester [5]); 
+    
+// Checks sensor is a F007th with a valid humidity reading equal or less than 100
+    if ((dataType == 0x45) && (Newhum <= 100)){
+      
+// If the channel is 1 and 
+      if (stnId == 1){
+        
+// If the raw temperature is 100 (default when sketch started so first reading), accept the new readings as the temperature and humidity on channel 1      
+        if (Ch1temp == 720){
+          Ch1temp = Newtemp;
+          Ch1hum = Newhum;
+          }     
+// If the raw temperature is other than 100 (so a subsequent reading), check that it is close to the previous reading before accepting as the new channel 1 reading
+        if (Ch1temp != 720){ 
+          differencetemp = Newtemp - Ch1temp;
+          differencehum = Newhum - Ch1hum;
+          if ((differencetemp < 20 && differencetemp > - 20) && (differencehum < 5 && differencehum > - 5)){
+            Ch1temp = Newtemp; 
+            Ch1hum = Newhum; 
+            }
+          }
+        }
+    
+// If the channel is 2 etc..  
+      if (stnId == 2){
+        if (Ch2temp == 720){ 
+          Ch2temp = Newtemp;
+          Ch2hum = Newhum;
+          }
+        if (Ch2temp != 720){ 
+          differencetemp = Newtemp - Ch2temp;
+          differencehum = Newhum - Ch2hum;
+          if ((differencetemp < 20 && differencetemp > - 20) && (differencehum < 5 && differencehum > - 5)){
+            Ch2temp = Newtemp;
+            Ch2hum = Newhum;
+            }
+          }
+        }
+      if (stnId == 3){
+        if (Ch3temp == 720){ 
+          Ch3temp = Newtemp;
+          Ch3hum = Newhum;
+          }
+        if (Ch3temp != 720){ 
+          differencetemp = Newtemp - Ch3temp;
+          differencehum = Newhum - Ch3hum;
+          if ((differencetemp < 20 && differencetemp > - 20) && (differencehum < 5 && differencehum > - 5)){
+            Ch3temp = Newtemp;
+            Ch3hum = Newhum;
+            }
+          }
+        }
+      if (stnId == 4){
+        if (Ch4temp == 720){ 
+          Ch4temp = Newtemp;
+          Ch4hum = Newhum;
+          }
+        if (Ch4temp != 720){ 
+          differencetemp = Newtemp - Ch4temp;
+          differencehum = Newhum - Ch4hum;
+          if ((differencetemp < 20 && differencetemp > - 20) && (differencehum < 5 && differencehum > - 5)){
+            Ch4temp = Newtemp;
+            Ch4hum = Newhum;
+            }
+          }
+        } 
+      if (stnId == 5){
+        if (Ch5temp == 200){
+          Ch5temp = Newtemp;
+          Ch5hum = Newhum;
+          }
+        if (Ch5temp != 200){
+          differencetemp = Newtemp - Ch5temp;
+          differencehum = Newhum - Ch5hum;
+          if ((differencetemp < 20 && differencetemp > - 20) && (differencehum < 5 && differencehum > - 5)){
+            Ch5temp = Newtemp;
+            Ch5hum = Newhum;
+            }
+          }
+        } 
+      if (stnId == 6){
+        if (Ch6temp == 200){ 
+          Ch6temp = Newtemp;
+          Ch6hum = Newhum;
+          }
+        if (Ch6temp != 200){
+          differencetemp = Newtemp - Ch6temp;
+          differencehum = Newhum - Ch6hum;
+          if ((differencetemp < 20 && differencetemp > - 20) && (differencehum < 5 && differencehum > - 5)){
+            Ch6temp = Newtemp;
+            Ch6hum = Newhum;
+            }
+          }
+        }
+      }
+    }
+  }
+
+void eraseManchester(){
+  for( int j=0; j < 4; j++){ 
+      manchester[j]=j;
+      }
+    }
