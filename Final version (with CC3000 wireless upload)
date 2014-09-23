@@ -154,7 +154,7 @@ byte    nosBytes   = 0;    //Counter stays within 0 -> maxBytes
 byte    bank       = 0;    //Points to the array of 0 to 3 banks of results from up to 4 last data downloads 
 byte    nosRepeats = 3;    //Number of times the header/data is fetched at least once or up to 4 times
 //Banks for multiple packets if required (at least one will be needed)
-byte  manchester[7];   //Stores 4 banks of manchester pattern decoded on the fly
+byte  manchester[7];   //Array to store 7 bytes of manchester pattern decoded on the fly
 
 // Variables to prepare recorded values for Ambient
 
