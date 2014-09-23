@@ -347,12 +347,12 @@ void add(byte bitData){
 // If the channel is 1 and 
       if (stnId == 1){
         
-// If the raw temperature is 100 (default when sketch started so first reading), accept the new readings as the temperature and humidity on channel 1      
+// If the raw temperature is 720 (default when sketch started so first reading), accept the new readings as the temperature and humidity on channel 1      
         if (Ch1temp == 720){
           Ch1temp = Newtemp;
           Ch1hum = Newhum;
           }     
-// If the raw temperature is other than 100 (so a subsequent reading), check that it is close to the previous reading before accepting as the new channel 1 reading
+// If the raw temperature is other than 720 (so a subsequent reading), check that it is close to the previous reading before accepting as the new channel 1 reading
         if (Ch1temp != 720){ 
           differencetemp = Newtemp - Ch1temp;
           differencehum = Newhum - Ch1hum;
