@@ -10,11 +10,7 @@ Captures Ambient F007th Thermo-Hygrometer data packets by identifying a header o
 Correctly identifies positive and negative temperature values for up to 8 channels.
    
 Correctly identifies humidity values for up to 8 channels.
-   
-Prints data for all channels to the serial port every 5 minutes.
-   
-Error checks data by rejecting humidity value outside the range 1 to 100% and temperature changes of 10C per minute or greater.
 
-Work in progress...
+Error checks data by rejecting humidity value outside the range 1 to 100%, humidity changes of more than 5% per minute and temperature changes of 1.5C per minute or greater.
 
-Send the data by wifi to a website
+Sends the data by wifi to Xively / prints to Serial every 5 minutes.
